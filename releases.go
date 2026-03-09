@@ -110,9 +110,14 @@ func (app *App) buildReleaseList() {
 
 func (app *App) getOnlineTargetCodename() string {
 	resp, err := app.getURL("https://ftp.debian.org/debian/dists/stable/Release")
-	app.failOnError(err, "Failed to fetch latest Debian release info")
+	if err != nil {
+		slog.Warn("Failed to fetch release info via HTTPS, falling back to HTTP", "error", err.Error())
 
-	defer closeWithWarning("https://ftp.debian.org/debian/dists/stable/Release", resp.Body)
+		resp, err = app.getURL("http://ftp.debian.org/debian/dists/stable/Release")
+		app.failOnError(err, "Failed to fetch latest Debian release info")
+	}
+
+	defer closeWithWarning("Debian Release Info", resp.Body)
 
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {

@@ -43,6 +43,22 @@ The program also accepts:
 ./debian-updater --dry-run
 ```
 
+## Command Line Options
+
+- `--dry-run`: Simulate the entire upgrade process without making any changes to the system. Highly recommended for first runs.
+- `--insecure`: Skip SSL/TLS certificate verification for external API calls (e.g., fetching release history).
+
+### When to use --insecure
+
+Legacy Debian systems (like Jessie or Stretch) often have severely outdated `ca-certificates` packages. This can cause the tool to fail when trying to reach HTTPS APIs because it cannot verify the server's certificate. 
+
+Use `--insecure` if:
+1. You see errors like `x509: certificate signed by unknown authority`.
+2. The system clock is incorrect (common on older hardware), causing certificate validation to fail.
+3. You are running in a restricted environment with a self-signed intercepting proxy.
+
+**Note:** The tool still verifies the integrity of Debian packages using GPG signatures via APT; `--insecure` only affects the initial metadata fetching from external APIs.
+
 ## Notes
 
 - root is required for real upgrades

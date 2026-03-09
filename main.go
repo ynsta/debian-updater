@@ -14,6 +14,7 @@ const logFile = "/var/log/debian_upgrade.log"
 
 type App struct {
 	dryRun         bool
+	insecure       bool
 	outputWriter   io.Writer
 	debianReleases []string
 }
@@ -22,6 +23,7 @@ func main() {
 	app := &App{}
 
 	flag.BoolVar(&app.dryRun, "dry-run", false, "Simulate the upgrade process without making system changes")
+	flag.BoolVar(&app.insecure, "insecure", false, "Skip SSL certificate verification")
 	flag.Parse()
 
 	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -48,8 +49,13 @@ func (app *App) getURL(rawURL string) (*http.Response, error) {
 		return nil, fmt.Errorf("build request for %s: %w", rawURL, err)
 	}
 
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: app.insecure},
+	}
+
 	client := &http.Client{
-		Timeout: httpTimeout,
+		Timeout:   httpTimeout,
+		Transport: tr,
 	}
 
 	resp, err := client.Do(req)

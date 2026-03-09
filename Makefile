@@ -33,7 +33,7 @@ $(addsuffix -dry, $(VERSIONS)): %-dry: build
 	@echo "=========================================================="
 	@echo "=== Running DRY RUN test on docker image: debian:$* ==="
 	@echo "=========================================================="
-	docker run --rm --name test-updater-$* -v $(PWD)/$(APP_NAME):/$(APP_NAME) debian:$* /$(APP_NAME) --dry-run
+	docker run --rm --name test-updater-$* -v $(PWD)/$(APP_NAME):/$(APP_NAME) debian:$* /$(APP_NAME) --dry-run --insecure
 
 $(addsuffix -full, $(VERSIONS)): %-full: build
 	@echo ""
@@ -41,4 +41,4 @@ $(addsuffix -full, $(VERSIONS)): %-full: build
 	@echo "=== Running FULL UPGRADE on docker image: debian:$* ==="
 	@echo "=== WARNING: This will take time and download data! ==="
 	@echo "=========================================================="
-	docker run --rm --name test-updater-$* -v $(PWD)/$(APP_NAME):/$(APP_NAME) debian:$* /$(APP_NAME)
+	docker run --rm --name test-updater-$* -v $(PWD)/$(APP_NAME):/$(APP_NAME) debian:$* /$(APP_NAME) --insecure

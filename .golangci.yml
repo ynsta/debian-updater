@@ -1,0 +1,27 @@
+version: "2"
+run:
+  tests: false
+linters:
+  default: all
+  disable:
+    - depguard
+    - err113
+    - exhaustruct
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - goconst
+    - godoclint
+    - inamedparam
+    - lll
+    - mnd
+    - nestif
+    - nolintlint
+    - tagliatelle
+    - varnamelen
+    - wsl
+issues:
+  max-same-issues: 5
+formatters:
+  enable:
+    - gofmt

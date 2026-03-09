@@ -28,14 +28,14 @@ test: go-test
 
 test-dry: $(addsuffix -dry, $(VERSIONS))
 
-%-dry: build
+$(addsuffix -dry, $(VERSIONS)): %-dry: build
 	@echo ""
 	@echo "=========================================================="
 	@echo "=== Running DRY RUN test on docker image: debian:$* ==="
 	@echo "=========================================================="
 	docker run --rm --name test-updater-$* -v $(PWD)/$(APP_NAME):/$(APP_NAME) debian:$* /$(APP_NAME) --dry-run
 
-%-full: build
+$(addsuffix -full, $(VERSIONS)): %-full: build
 	@echo ""
 	@echo "=========================================================="
 	@echo "=== Running FULL UPGRADE on docker image: debian:$* ==="

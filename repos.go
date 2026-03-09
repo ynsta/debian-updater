@@ -40,16 +40,7 @@ func (app *App) patchAndTestThirdPartyRepo(disabledFile, finalCodename string) e
 		return fmt.Errorf("read disabled repo file %s: %w", disabledFile, err)
 	}
 
-	patchedContent := string(content)
-
-	for _, oldRelease := range fallbackReleases {
-		if oldRelease == finalCodename {
-			break
-		}
-
-		re := regexp.MustCompile(`\b` + regexp.QuoteMeta(oldRelease) + `\b`)
-		patchedContent = re.ReplaceAllString(patchedContent, finalCodename)
-	}
+	patchedContent := patchRepoContent(string(content), finalCodename, app.debianReleases)
 
 	// #nosec G306,G304,G703 -- the path is validated by repoOriginalName and APT source files must stay world-readable.
 	err = os.WriteFile(originalName, []byte(patchedContent), 0o644)
@@ -81,6 +72,21 @@ func (app *App) patchAndTestThirdPartyRepo(disabledFile, finalCodename string) e
 	slog.Info("Repository updated successfully. Kept enabled.", "file", originalName)
 
 	return nil
+}
+
+func patchRepoContent(content, finalCodename string, releases []string) string {
+	patchedContent := content
+
+	for _, oldRelease := range releases {
+		if oldRelease == finalCodename {
+			break
+		}
+
+		re := regexp.MustCompile(`\b` + regexp.QuoteMeta(oldRelease) + `\b`)
+		patchedContent = re.ReplaceAllString(patchedContent, finalCodename)
+	}
+
+	return patchedContent
 }
 
 func repoOriginalName(disabledFile string) (string, error) {

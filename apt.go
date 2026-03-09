@@ -38,7 +38,7 @@ func (app *App) runUpgradeCommands() {
 
 func (app *App) generateCleanSources(codename string) {
 	components := "main contrib non-free"
-	if indexOf(codename, fallbackReleases) >= indexOf("bookworm", fallbackReleases) {
+	if indexOf(codename, app.debianReleases) >= indexOf("bookworm", app.debianReleases) {
 		components = "main contrib non-free non-free-firmware"
 	}
 

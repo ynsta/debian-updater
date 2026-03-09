@@ -7,7 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 )
+
+const httpTimeout = 30 * time.Second
 
 func closeWithWarning(name string, closer io.Closer) {
 	err := closer.Close()
@@ -45,7 +48,9 @@ func (app *App) getURL(rawURL string) (*http.Response, error) {
 		return nil, fmt.Errorf("build request for %s: %w", rawURL, err)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: httpTimeout,
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

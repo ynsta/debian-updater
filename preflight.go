@@ -88,31 +88,46 @@ func isUnsafeDevice(device string) bool {
 func (app *App) checkInitramfsModules() {
 	slog.Info("Running pre-flight safety check on initramfs configuration...")
 
-	file, err := os.Open("/etc/initramfs-tools/initramfs.conf")
-	if err != nil {
-		slog.Info("No initramfs-tools configuration found. Skipping check.")
+	matches, _ := filepath.Glob("/etc/initramfs-tools/conf.d/*")
+	files := make([]string, 0, 1+len(matches))
+	files = append(files, "/etc/initramfs-tools/initramfs.conf")
+	files = append(files, matches...)
 
-		return
-	}
-
-	scanner := bufio.NewScanner(file)
 	isDep := false
 
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "#") {
+	var failingFile string
+
+	for _, path := range files {
+		// #nosec G304 -- paths are discovered via system glob or are well-known.
+		file, err := os.Open(path)
+		if err != nil {
 			continue
 		}
 
-		val, ok := strings.CutPrefix(line, "MODULES=")
-		if !ok {
-			continue
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if strings.HasPrefix(line, "#") {
+				continue
+			}
+
+			val, ok := strings.CutPrefix(line, "MODULES=")
+			if !ok {
+				continue
+			}
+
+			val = strings.TrimSpace(val)
+			if val == "dep" {
+				isDep = true
+				failingFile = path
+
+				break
+			}
 		}
 
-		val = strings.TrimSpace(val)
-		if val == "dep" {
-			isDep = true
+		closeWithWarning(path, file)
 
+		if isDep {
 			break
 		}
 	}
@@ -122,12 +137,13 @@ func (app *App) checkInitramfsModules() {
 			"",
 			"=========================================================================",
 			"[FATAL ERROR] Your initramfs is configured to only pack 'dep' (dependent) modules.",
+			"Detected in: "+failingFile,
 			"This means the boot image ONLY contains drivers for your CURRENT hypervisor.",
 			"If you upgrade or migrate this VM, it will likely fail to boot because it",
 			"will lack the necessary generic storage and network drivers.",
 			"",
 			"HOW TO FIX:",
-			"1. Open: /etc/initramfs-tools/initramfs.conf",
+			"1. Open: "+failingFile,
 			"2. Change the line 'MODULES=dep' to 'MODULES=most'",
 			"3. Apply the change by running: update-initramfs -u",
 			"=========================================================================",
@@ -135,18 +151,15 @@ func (app *App) checkInitramfsModules() {
 		)
 
 		if !app.dryRun {
-			closeWithWarning("/etc/initramfs-tools/initramfs.conf", file)
 			os.Exit(1)
 		}
 
 		slog.Warn("[DRY RUN] Would have halted upgrade due to unsafe initramfs MODULES=dep configuration.")
-		closeWithWarning("/etc/initramfs-tools/initramfs.conf", file)
 
 		return
 	}
 
-	closeWithWarning("/etc/initramfs-tools/initramfs.conf", file)
-	slog.Info("Initramfs configuration is safe (MODULES=most).")
+	slog.Info("Initramfs configuration is safe (no MODULES=dep found).")
 }
 
 func (app *App) checkWeakGPGKeys() {

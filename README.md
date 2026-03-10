@@ -31,10 +31,10 @@ Run lint checks:
 make lint
 ```
 
-Run a dry-run inside a Debian container:
+Run a dry-run inside the Vagrant VM:
 
 ```bash
-make bookworm-dry
+make vagrant-dry
 ```
 
 The program also accepts:

@@ -79,6 +79,14 @@ func isUnsafeDevice(device string) bool {
 		return false
 	}
 
+	// Optical drives and floppies are generally not boot-critical for the upgrade
+	// and often don't have stable identifiers like UUIDs.
+	if strings.HasPrefix(device, "/dev/sr") ||
+		strings.HasPrefix(device, "/dev/cdrom") ||
+		strings.HasPrefix(device, "/dev/fd") {
+		return false
+	}
+
 	return !strings.HasPrefix(device, "/dev/mapper/") &&
 		!strings.HasPrefix(device, "/dev/disk/") &&
 		!strings.HasPrefix(device, "/dev/md") &&

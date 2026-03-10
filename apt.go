@@ -68,7 +68,11 @@ func (app *App) runAptUpdate() error {
 }
 
 func (app *App) runAptCommand(args ...string) {
-	app.failOnError(app.runAptCommandWithError(args...), fmt.Sprintf("Command failed: apt-get %v", args))
+	fullArgs := append([]string{
+		"-o", "Dpkg::Options::=--force-confdef",
+		"-o", "Dpkg::Options::=--force-confold",
+	}, args...)
+	app.failOnError(app.runAptCommandWithError(fullArgs...), fmt.Sprintf("Command failed: apt-get %v", args))
 }
 
 func (app *App) runAptCommandWithError(args ...string) error {
@@ -82,7 +86,12 @@ func (app *App) runAptCommandWithError(args ...string) error {
 	// #nosec G204 -- the command name is fixed and only the argument list varies.
 	cmd := exec.CommandContext(context.Background(), "apt-get", args...)
 
-	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+	cmd.Env = append(os.Environ(),
+		"DEBIAN_FRONTEND=noninteractive",
+		"DEBCONF_NONINTERACTIVE_SEEN=true",
+		"DEBCONF_NOWARNINGS=yes",
+		"APT_LISTCHANGES_FRONTEND=none",
+	)
 	cmd.Stdout = app.outputWriter
 	cmd.Stderr = app.outputWriter
 

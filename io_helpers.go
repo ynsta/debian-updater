@@ -50,6 +50,7 @@ func (app *App) getURL(rawURL string) (*http.Response, error) {
 	}
 
 	tr := &http.Transport{
+		// #nosec G402 -- InsecureSkipVerify is explicitly controlled by the user via --insecure flag
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: app.insecure},
 	}
 

@@ -2,11 +2,14 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -36,8 +39,8 @@ func (app *App) mustCurrentCodename() string {
 	return currentCodename
 }
 
-func (app *App) mustTargetCodename() string {
-	targetCodename := app.getOnlineTargetCodename()
+func (app *App) mustTargetCodename(ctx context.Context) string {
+	targetCodename := app.getOnlineTargetCodename(ctx)
 	if targetCodename == "" {
 		app.failOnError(errors.New("target empty"), "Could not detect online target codename")
 	}
@@ -56,10 +59,10 @@ func (app *App) mustReleaseIndexes(currentCodename, targetCodename string) (int,
 	return currIdx, targetIdx
 }
 
-func (app *App) buildReleaseList() {
-	slog.Info("Attempting to fetch Debian release history online...")
+func (app *App) buildReleaseList(ctx context.Context) {
+	slog.Info("Attempting to fetch Debian release history online...", "step", "releases.fetch")
 
-	resp, err := app.getURL("https://endoflife.date/api/debian.json")
+	resp, err := app.fetch(ctx, "https://endoflife.date/api/debian.json")
 	if err != nil {
 		slog.Warn("Failed to reach API. Falling back to hardcoded release list.")
 
@@ -108,47 +111,87 @@ func (app *App) buildReleaseList() {
 	slog.Info("Successfully built dynamic release list", "total_releases_found", len(app.debianReleases))
 }
 
-func (app *App) getOnlineTargetCodename() string {
-	resp, err := app.getURL("https://ftp.debian.org/debian/dists/stable/Release")
+func (app *App) getOnlineTargetCodename(ctx context.Context) string {
+	resp, err := app.fetch(ctx, "https://ftp.debian.org/debian/dists/stable/Release")
 	if err != nil {
-		slog.Warn("Failed to fetch release info via HTTPS, falling back to HTTP", "error", err.Error())
+		// Cleartext HTTP is only acceptable when the user has already opted in
+		// to insecure transport. Otherwise a network-path attacker can force a
+		// TLS failure and poison the upgrade target via a MITM'd HTTP response.
+		if !app.cfg.InsecureTLS {
+			app.failOnError(err, "Failed to fetch latest Debian release info over HTTPS (pass --insecure-tls to allow cleartext fallback)")
+		}
 
-		resp, err = app.getURL("http://ftp.debian.org/debian/dists/stable/Release")
+		slog.Warn("HTTPS fetch failed, falling back to HTTP per --insecure-tls", "error", err.Error())
+
+		resp, err = app.fetch(ctx, "http://ftp.debian.org/debian/dists/stable/Release")
 		app.failOnError(err, "Failed to fetch latest Debian release info")
 	}
 
 	defer closeWithWarning("Debian Release Info", resp.Body)
 
+	codename := ""
+
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
-		if codename, ok := strings.CutPrefix(scanner.Text(), "Codename:"); ok {
-			return strings.TrimSpace(codename)
+		if value, ok := strings.CutPrefix(scanner.Text(), "Codename:"); ok {
+			codename = strings.TrimSpace(value)
+
+			break
 		}
 	}
 
-	return ""
+	app.failOnError(scanner.Err(), "Failed to read Debian release info")
+
+	if codename == "" {
+		return ""
+	}
+
+	if indexOf(codename, app.debianReleases) == -1 {
+		app.failOnError(
+			fmt.Errorf("target codename %q not in known release list", codename),
+			"Refusing to upgrade to an unrecognised codename",
+		)
+	}
+
+	return codename
 }
 
 func (app *App) getCurrentCodename() string {
-	file, err := os.Open("/etc/os-release")
-	if err != nil && app.dryRun {
-		slog.Warn("[DRY RUN] Could not open /etc/os-release. Assuming 'buster' for simulation.")
+	data, err := app.fs.ReadFile("/etc/os-release")
+	if err != nil && app.cfg.DryRun {
+		slog.Warn("Could not read /etc/os-release; assuming 'buster' for dry-run simulation", "step", "releases.current")
 
-		return "buster" // Fallback for testing on non-Debian systems like Mac/Windows
+		return "buster"
 	}
 
-	app.failOnError(err, "Failed to open /etc/os-release")
+	app.failOnError(err, "Failed to read /etc/os-release")
 
-	defer closeWithWarning("/etc/os-release", file)
+	codename, err := parseOSReleaseCodename(bytes.NewReader(data))
+	app.failOnError(err, "Failed to parse /etc/os-release")
 
-	scanner := bufio.NewScanner(file)
+	return codename
+}
+
+// parseOSReleaseCodename extracts VERSION_CODENAME from an os-release-formatted
+// stream. Quotes around the value (single or double) are stripped per the
+// os-release spec. Returns the empty string if the key is absent.
+func parseOSReleaseCodename(r io.Reader) (string, error) {
+	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		if strings.HasPrefix(scanner.Text(), "VERSION_CODENAME=") {
-			return strings.TrimSpace(strings.Split(scanner.Text(), "=")[1])
+		value, ok := strings.CutPrefix(scanner.Text(), "VERSION_CODENAME=")
+		if !ok {
+			continue
 		}
+
+		return strings.Trim(strings.TrimSpace(value), `"'`), nil
 	}
 
-	return ""
+	err := scanner.Err()
+	if err != nil {
+		return "", fmt.Errorf("scan os-release: %w", err)
+	}
+
+	return "", nil
 }
 
 func indexOf(val string, arr []string) int {

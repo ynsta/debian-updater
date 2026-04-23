@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"log/slog"
 	"os"
@@ -11,13 +12,13 @@ import (
 )
 
 func (app *App) checkDiskMounts() {
-	slog.Info("Running pre-flight safety check on disk mounts...")
+	slog.Info("Running pre-flight safety check on disk mounts...", "step", "preflight.disk_mounts")
 
 	files := []string{"/etc/fstab", "/etc/crypttab"}
 	hasUnsafeMounts := false
 
 	for _, file := range files {
-		content, err := os.ReadFile(file) // #nosec G304 -- only known system files are inspected here.
+		content, err := app.fs.ReadFile(file)
 		if err != nil {
 			continue
 		}
@@ -36,7 +37,8 @@ func (app *App) checkDiskMounts() {
 
 			device := fields[0]
 			if isUnsafeDevice(device) {
-				slog.Error("Unsafe fragile device reference detected!",
+				slog.Error("Unsafe fragile device reference detected",
+					"step", "preflight.disk_mounts",
 					"file", file,
 					"line", i+1,
 					"device", device)
@@ -47,6 +49,7 @@ func (app *App) checkDiskMounts() {
 	}
 
 	if hasUnsafeMounts {
+		slog.Error("Preflight failed: unsafe disk mount references", "step", "preflight.disk_mounts", "remediation", "replace /dev/sdX with UUID= in /etc/fstab")
 		app.printLines(
 			"",
 			"=========================================================================",
@@ -62,16 +65,16 @@ func (app *App) checkDiskMounts() {
 			"",
 		)
 
-		if !app.dryRun {
+		if !app.cfg.DryRun {
 			os.Exit(1)
 		}
 
-		slog.Warn("[DRY RUN] Would have halted upgrade due to unsafe disk mounts.")
+		slog.Warn("Would have halted upgrade due to unsafe disk mounts", "step", "preflight.disk_mounts", "dry_run", true)
 
 		return
 	}
 
-	slog.Info("Disk mount safety check passed. All devices use stable identifiers.")
+	slog.Info("Disk mount safety check passed. All devices use stable identifiers.", "step", "preflight.disk_mounts")
 }
 
 func isUnsafeDevice(device string) bool {
@@ -94,9 +97,9 @@ func isUnsafeDevice(device string) bool {
 }
 
 func (app *App) checkInitramfsModules() {
-	slog.Info("Running pre-flight safety check on initramfs configuration...")
+	slog.Info("Running pre-flight safety check on initramfs configuration...", "step", "preflight.initramfs")
 
-	matches, _ := filepath.Glob("/etc/initramfs-tools/conf.d/*")
+	matches, _ := app.fs.Glob("/etc/initramfs-tools/conf.d/*")
 	files := make([]string, 0, 1+len(matches))
 	files = append(files, "/etc/initramfs-tools/initramfs.conf")
 	files = append(files, matches...)
@@ -106,13 +109,12 @@ func (app *App) checkInitramfsModules() {
 	var failingFile string
 
 	for _, path := range files {
-		// #nosec G304 -- paths are discovered via system glob or are well-known.
-		file, err := os.Open(path)
+		data, err := app.fs.ReadFile(path)
 		if err != nil {
 			continue
 		}
 
-		scanner := bufio.NewScanner(file)
+		scanner := bufio.NewScanner(bytes.NewReader(data))
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if strings.HasPrefix(line, "#") {
@@ -133,14 +135,13 @@ func (app *App) checkInitramfsModules() {
 			}
 		}
 
-		closeWithWarning(path, file)
-
 		if isDep {
 			break
 		}
 	}
 
 	if isDep {
+		slog.Error("Preflight failed: initramfs MODULES=dep restricts drivers to current hardware", "step", "preflight.initramfs", "file", failingFile, "remediation", "set MODULES=most and run update-initramfs -u")
 		app.printLines(
 			"",
 			"=========================================================================",
@@ -158,27 +159,27 @@ func (app *App) checkInitramfsModules() {
 			"",
 		)
 
-		if !app.dryRun {
+		if !app.cfg.DryRun {
 			os.Exit(1)
 		}
 
-		slog.Warn("[DRY RUN] Would have halted upgrade due to unsafe initramfs MODULES=dep configuration.")
+		slog.Warn("Would have halted upgrade due to unsafe initramfs MODULES=dep configuration", "step", "preflight.initramfs", "file", failingFile, "dry_run", true)
 
 		return
 	}
 
-	slog.Info("Initramfs configuration is safe (no MODULES=dep found).")
+	slog.Info("Initramfs configuration is safe (no MODULES=dep found).", "step", "preflight.initramfs")
 }
 
-func (app *App) checkWeakGPGKeys() {
-	slog.Info("Scanning for weak SHA-1 signatures in APT keyrings...")
+func (app *App) checkWeakGPGKeys(ctx context.Context) {
+	slog.Info("Scanning for weak SHA-1 signatures in APT keyrings...", "step", "preflight.gpg")
 
 	var keyFiles []string
 
 	dirs := []string{"/etc/apt/keyrings", "/usr/share/keyrings"}
 
 	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
+		entries, err := app.fs.ReadDir(dir)
 		if err != nil {
 			continue
 		}
@@ -195,17 +196,18 @@ func (app *App) checkWeakGPGKeys() {
 	for _, keyFile := range keyFiles {
 		// gpg --list-packets outputs algorithm IDs. ID 2 is SHA-1.
 		// #nosec G204 -- the command is fixed and key files come from trusted system directories.
-		cmd := exec.CommandContext(context.Background(), "gpg", "--no-default-keyring", "--keyring", keyFile, "--list-packets")
+		cmd := exec.CommandContext(ctx, "gpg", "--no-default-keyring", "--keyring", keyFile, "--list-packets")
 
 		out, err := cmd.CombinedOutput()
 		if err == nil && strings.Contains(string(out), "digest algo 2") {
-			slog.Warn("Weak SHA-1 signature found in keyring", "file", keyFile)
+			slog.Warn("Weak SHA-1 signature found in keyring", "step", "preflight.gpg", "file", keyFile)
 
 			foundWeak = true
 		}
 	}
 
 	if foundWeak {
+		slog.Warn("Preflight warning: weak SHA-1 GPG signatures in APT keyrings", "step", "preflight.gpg", "remediation", "reinstall affected third-party repositories per vendor instructions")
 		app.printLines(
 			"",
 			"=========================================================================",
@@ -224,5 +226,5 @@ func (app *App) checkWeakGPGKeys() {
 		return
 	}
 
-	slog.Info("GPG keyring scan passed. No weak SHA-1 signatures detected.")
+	slog.Info("GPG keyring scan passed. No weak SHA-1 signatures detected.", "step", "preflight.gpg")
 }

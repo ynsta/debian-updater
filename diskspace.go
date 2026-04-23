@@ -13,7 +13,7 @@ import (
 // hard to recover without a network-attached rescue image. Five gigabytes
 // covers a worst-case full-upgrade of a minimal Debian install plus a little
 // slack; operators running heavier profiles should plan accordingly.
-const minFreeBytes = 5 * 1024 * 1024 * 1024
+const minFreeBytes uint64 = 5 * 1024 * 1024 * 1024
 
 // diskSpacePaths are the filesystems the tool probes before any mutation.
 // /var/cache/apt is where downloaded packages land; / is where dpkg unpacks

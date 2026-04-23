@@ -24,6 +24,14 @@ type DpkgRunner interface {
 	RunWithOutput(ctx context.Context, args []string) ([]byte, error)
 }
 
+// DebconfInspector reads debconf selections for a package. It is split from
+// DpkgRunner because `debconf-show` is a separate binary with its own
+// availability story — some minimal installs lack the `debconf-utils`
+// package entirely, and the preflight must tolerate that.
+type DebconfInspector interface {
+	Show(ctx context.Context, pkg string) ([]byte, error)
+}
+
 // Fetcher performs a single HTTP GET against an already-validated URL. The
 // caller owns the response body and must Close it. No retry or timeout logic
 // is assumed here — those belong to the App layer so tests can exercise them

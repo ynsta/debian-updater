@@ -16,6 +16,11 @@ import (
 // reports unresolved packages; lets the outer error chain stay typed.
 var errDpkgAuditUnclean = errors.New("dpkg reports unresolved packages")
 
+// errGrubInstallDevicesStale fires when grub-pc is configured to install to a
+// block device that no longer exists on the system (typically after a VM
+// migration that renamed the disks).
+var errGrubInstallDevicesStale = errors.New("grub-pc install_devices references missing block devices")
+
 const (
 	httpTimeout    = 30 * time.Second
 	retryAttempts  = 3

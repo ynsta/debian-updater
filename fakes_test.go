@@ -84,6 +84,23 @@ func (d *fakeDpkg) RunWithOutput(_ context.Context, args []string) ([]byte, erro
 	return d.out[verb], d.errs[verb]
 }
 
+// fakeDebconf returns scripted debconf-show output keyed by package name.
+type fakeDebconf struct {
+	mu    sync.Mutex
+	calls []string
+	out   map[string][]byte
+	errs  map[string]error
+}
+
+func (f *fakeDebconf) Show(_ context.Context, pkg string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.calls = append(f.calls, pkg)
+
+	return f.out[pkg], f.errs[pkg]
+}
+
 // fakeFS is an in-memory filesystem that satisfies the FS interface. It tracks
 // write order so tests can assert that backups occur before atomic writes.
 type fakeFS struct {

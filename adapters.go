@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	iofs "io/fs"
@@ -65,6 +66,34 @@ func (realDpkgRunner) RunWithOutput(ctx context.Context, args []string) ([]byte,
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return out, fmt.Errorf("run dpkg %v: %w", args, err)
+	}
+
+	return out, nil
+}
+
+// realDebconfInspector wraps `debconf-show <pkg>` and returns its stdout.
+// A missing binary (debconf-utils not installed) and a non-zero exit on an
+// unknown package are both reported as empty output with no error, so the
+// preflight can distinguish "nothing to check" from a real failure.
+type realDebconfInspector struct{}
+
+//nolint:ireturn // DI constructor returns the DebconfInspector interface.
+func newRealDebconfInspector() DebconfInspector { return realDebconfInspector{} }
+
+func (realDebconfInspector) Show(ctx context.Context, pkg string) ([]byte, error) {
+	// #nosec G204 -- binary name is fixed ("debconf-show"); pkg is from the tool's own preflight logic.
+	cmd := exec.CommandContext(ctx, "debconf-show", pkg)
+
+	out, err := cmd.Output()
+	if err != nil {
+		// debconf-show exits 10 if the package is not in the database; treat
+		// that as "no selections to inspect" rather than a hard failure.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return nil, nil //nolint:nilnil // intentional: package unknown to debconf is an empty, non-error result
+		}
+
+		return nil, fmt.Errorf("run debconf-show %s: %w", pkg, err)
 	}
 
 	return out, nil

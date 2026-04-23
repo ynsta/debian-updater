@@ -489,6 +489,93 @@ func TestRetryRespectsCtxCancellation(t *testing.T) {
 	}
 }
 
+func TestParseGrubInstallDevices(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{
+			"single device",
+			"* grub-pc/install_devices: /dev/sda\n",
+			[]string{"/dev/sda"},
+		},
+		{
+			"multiselect comma-separated",
+			"grub-pc/install_devices: /dev/sda, /dev/sdb\n",
+			[]string{"/dev/sda", "/dev/sdb"},
+		},
+		{
+			"surrounded by other keys",
+			"* grub-pc/timeout: 5\n* grub-pc/install_devices: /dev/xvda\n* grub-pc/hidden_timeout: 0\n",
+			[]string{"/dev/xvda"},
+		},
+		{
+			"empty value",
+			"* grub-pc/install_devices:\n",
+			nil,
+		},
+		{
+			"key absent",
+			"* grub-pc/timeout: 5\n",
+			nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseGrubInstallDevices(tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("parseGrubInstallDevices = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("parseGrubInstallDevices[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestCheckGrubInstallDevicesHappy(t *testing.T) {
+	fs := newFakeFS()
+	// Seed a block device as if /dev/xvda exists.
+	_ = fs.WriteAtomic("/dev/xvda", []byte{}, 0o600)
+	dbc := &fakeDebconf{out: map[string][]byte{"grub-pc": []byte("* grub-pc/install_devices: /dev/xvda\n")}}
+	app := newTestApp(Config{}, &fakeAptRunner{}, fs)
+	app.debconf = dbc
+
+	app.checkGrubInstallDevices(context.Background())
+
+	if len(dbc.calls) != 1 || dbc.calls[0] != "grub-pc" {
+		t.Errorf("expected one debconf-show grub-pc call, got %v", dbc.calls)
+	}
+}
+
+func TestCheckGrubInstallDevicesDetectsMigration(t *testing.T) {
+	fs := newFakeFS()
+	// Seed only the new device (xvda); old /dev/sda is absent.
+	_ = fs.WriteAtomic("/dev/xvda", []byte{}, 0o600)
+
+	devices := parseGrubInstallDevices("* grub-pc/install_devices: /dev/sda\n")
+	app := newTestApp(Config{}, &fakeAptRunner{}, fs)
+
+	missing := app.missingDevices(devices)
+	if len(missing) != 1 || missing[0] != "/dev/sda" {
+		t.Errorf("missingDevices = %v, want [/dev/sda]", missing)
+	}
+}
+
+func TestCheckGrubInstallDevicesDebconfMissing(t *testing.T) {
+	// debconf-show not installed / exits with error: preflight must not block.
+	fs := newFakeFS()
+	dbc := &fakeDebconf{errs: map[string]error{"grub-pc": errors.New("exec: \"debconf-show\": not found")}}
+	app := newTestApp(Config{}, &fakeAptRunner{}, fs)
+	app.debconf = dbc
+
+	app.checkGrubInstallDevices(context.Background()) // must not os.Exit
+}
+
 func TestCheckDpkgStateClean(t *testing.T) {
 	dpkg := &fakeDpkg{out: map[string][]byte{"--audit": []byte("\n")}}
 	app := newTestAppWithDpkg(Config{}, dpkg)

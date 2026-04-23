@@ -26,6 +26,7 @@ type App struct {
 	cfg            Config
 	apt            AptRunner
 	dpkg           DpkgRunner
+	debconf        DebconfInspector
 	fetcher        Fetcher
 	fs             FS
 	lockProber     LockProber
@@ -41,11 +42,12 @@ type App struct {
 // (AptRunner, DpkgRunner, Fetcher, FS, LockProber). Tests substitute fake
 // implementations; the production main() uses the exec/net-http/os-backed
 // adapters.
-func NewApp(cfg Config, apt AptRunner, dpkg DpkgRunner, fetcher Fetcher, fsys FS, locks LockProber, output io.Writer, logFile *os.File, logger *slog.Logger, runID, hostname string) *App {
+func NewApp(cfg Config, apt AptRunner, dpkg DpkgRunner, debconf DebconfInspector, fetcher Fetcher, fsys FS, locks LockProber, output io.Writer, logFile *os.File, logger *slog.Logger, runID, hostname string) *App {
 	return &App{
 		cfg:          cfg,
 		apt:          apt,
 		dpkg:         dpkg,
+		debconf:      debconf,
 		fetcher:      fetcher,
 		fs:           fsys,
 		lockProber:   locks,
@@ -84,6 +86,7 @@ func main() {
 		cfg,
 		newRealAptRunner(output),
 		newRealDpkgRunner(),
+		newRealDebconfInspector(),
 		newRealFetcher(cfg.InsecureTLS, httpTimeout),
 		newRealFS(),
 		newRealLockProber(),
@@ -182,6 +185,7 @@ func (app *App) runPreflightChecks(ctx context.Context) {
 	app.checkInitramfsModules()
 	app.checkWeakGPGKeys(ctx)
 	app.checkDpkgState(ctx)
+	app.checkGrubInstallDevices(ctx)
 }
 
 func (app *App) finishAndCleanup(ctx context.Context, finalCodename string) {

@@ -1,4 +1,5 @@
 APP_NAME := debian-updater
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BUILD_CMD := CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static" -s -w'
 GOARCH ?= amd64
 ifneq ($(GOARCH),amd64)
@@ -7,7 +8,7 @@ endif
 
 VERSIONS := jessie stretch buster bullseye bookworm
 
-.PHONY: all build clean test go-test lint vagrant-up vagrant-dry vagrant-full vagrant-destroy
+.PHONY: all build clean test go-test lint vuln sbom sbom-scan release-check vagrant-up vagrant-dry vagrant-full vagrant-destroy
 
 all: build
 
@@ -27,6 +28,22 @@ go-test:
 lint:
 	@echo "==> Running golangci-lint..."
 	golangci-lint run
+
+vuln:
+	@echo "==> Running govulncheck..."
+	govulncheck ./...
+
+sbom:
+	@echo "==> Generating SBOM (CycloneDX JSON) for $(APP_NAME) $(VERSION)..."
+	syft . --source-name $(APP_NAME) --source-version $(VERSION) -o cyclonedx-json=sbom.json
+	@echo "==> SBOM written: sbom.json"
+
+sbom-scan: sbom
+	@echo "==> Scanning SBOM with grype (fail on high/critical)..."
+	grype sbom.json --fail-on high
+
+release-check: lint test vuln sbom-scan
+	@echo "==> Release checks passed"
 
 test: go-test
 

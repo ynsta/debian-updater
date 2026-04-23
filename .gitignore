@@ -1,6 +1,7 @@
 debian-updater
 *.log
 coverage.out
+sbom.json
 .DS_Store
 .vagrant/
 default:

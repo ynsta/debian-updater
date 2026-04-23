@@ -53,13 +53,19 @@ vagrant-up:
 	@echo "==> Starting Vagrant VM (libvirt)..."
 	vagrant up --provider=libvirt
 
+# The Vagrant box boots an EOL Debian release (buster) so the tool can
+# exercise its archive.debian.org path end-to-end. --trust-eol-archive
+# acknowledges the [trusted=yes] mirror configuration; --insecure-tls lets
+# the old CA bundle fall back to HTTP when modern TLS negotiation fails.
+VAGRANT_FLAGS := --trust-eol-archive --insecure-tls
+
 vagrant-dry: vagrant-up
 	@echo "==> Running DRY RUN test in Vagrant..."
-	vagrant ssh -c "sudo /debian-updater/$(APP_NAME) --dry-run"
+	vagrant ssh -c "sudo /debian-updater/$(APP_NAME) --dry-run $(VAGRANT_FLAGS)"
 
 vagrant-full: vagrant-up
 	@echo "==> Running FULL UPGRADE in Vagrant..."
-	vagrant ssh -c "sudo /debian-updater/$(APP_NAME)"
+	vagrant ssh -c "sudo /debian-updater/$(APP_NAME) $(VAGRANT_FLAGS)"
 
 vagrant-destroy:
 	@echo "==> Destroying Vagrant VM..."

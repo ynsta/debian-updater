@@ -87,7 +87,7 @@ jobs:
           artifact-name: sbom.json
           output-file: sbom.json
       - name: Scan SBOM with grype
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@v6
         with:
           sbom: sbom.json
           fail-build: true

@@ -7,11 +7,13 @@ linters:
     - depguard
     - err113
     - exhaustruct
+    - exhaustruct_v5
     - funlen
     - gochecknoglobals
     - gochecknoinits
     - goconst
     - godoclint
+    - gomodguard
     - inamedparam
     - lll
     - mnd

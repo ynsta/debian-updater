@@ -88,8 +88,7 @@ func (realDebconfInspector) Show(ctx context.Context, pkg string) ([]byte, error
 	if err != nil {
 		// debconf-show exits 10 if the package is not in the database; treat
 		// that as "no selections to inspect" rather than a hard failure.
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if _, ok := errors.AsType[*exec.ExitError](err); ok {
 			return nil, nil //nolint:nilnil // intentional: package unknown to debconf is an empty, non-error result
 		}
 

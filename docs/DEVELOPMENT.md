@@ -37,9 +37,11 @@ gh auth status
 ### Go toolchain
 
 ```bash
-go version               # 1.26+ required (see go.mod)
-golangci-lint --version  # install via /lint-go-install if missing
-govulncheck -version     # install via /govulncheck-install if missing
+go version               # must match the `go` directive in go.mod (make pins it via GOTOOLCHAIN)
+golangci-lint --version  # see GOLANGCI_LINT_VERSION in .github/workflows/ci.yml; install via /lint-go-install
+govulncheck -version     # see GOVULNCHECK_VERSION in .github/workflows/ci.yml; install via /govulncheck-install
+syft version             # see SYFT_VERSION in .github/workflows/ci.yml
+grype version            # see GRYPE_VERSION in .github/workflows/ci.yml
 ```
 
 ### Vagrant (integration testing)

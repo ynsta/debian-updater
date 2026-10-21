@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -93,8 +94,8 @@ func (app *App) buildReleaseList(ctx context.Context) {
 
 	app.debianReleases = app.debianReleases[:0]
 
-	for i := len(releases) - 1; i >= 0; i-- {
-		codename := strings.ToLower(releases[i].Codename)
+	for _, release := range slices.Backward(releases) {
+		codename := strings.ToLower(release.Codename)
 		if codename != "" {
 			app.debianReleases = append(app.debianReleases, codename)
 		}

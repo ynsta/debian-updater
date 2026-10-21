@@ -289,7 +289,9 @@ type fakeDirEntry struct {
 	mode os.FileMode
 }
 
-func (d *fakeDirEntry) Name() string               { return d.name }
-func (d *fakeDirEntry) IsDir() bool                { return d.mode.IsDir() }
-func (d *fakeDirEntry) Type() iofs.FileMode        { return d.mode.Type() }
-func (d *fakeDirEntry) Info() (iofs.FileInfo, error) { return &fakeFileInfo{name: d.name, mode: d.mode}, nil }
+func (d *fakeDirEntry) Name() string        { return d.name }
+func (d *fakeDirEntry) IsDir() bool         { return d.mode.IsDir() }
+func (d *fakeDirEntry) Type() iofs.FileMode { return d.mode.Type() }
+func (d *fakeDirEntry) Info() (iofs.FileInfo, error) {
+	return &fakeFileInfo{name: d.name, mode: d.mode}, nil
+}

@@ -9,30 +9,58 @@ on:
 permissions:
   contents: read
 
+# Toolchain and tool pins. Keep GO_VERSION in sync with the `go` directive in go.mod.
+env:
+  # renovate: datasource=golang-version depName=go
+  GO_VERSION: "1.27.3"
+  # renovate: datasource=github-releases depName=golangci/golangci-lint
+  GOLANGCI_LINT_VERSION: "v2.15.0"
+  # renovate: datasource=go depName=golang.org/x/vuln
+  GOVULNCHECK_VERSION: "v1.9.0"
+  # renovate: datasource=github-releases depName=anchore/syft
+  SYFT_VERSION: "v1.55.0"
+  # renovate: datasource=github-releases depName=anchore/grype
+  GRYPE_VERSION: "v0.121.0"
+
 jobs:
+  toolchain:
+    name: Toolchain pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check GO_VERSION matches go.mod
+        run: |
+          mod_version="$(sed -n 's/^go //p' go.mod)"
+          if [ "$mod_version" != "$GO_VERSION" ]; then
+            echo "::error::GO_VERSION ($GO_VERSION) does not match go.mod ($mod_version)"
+            exit 1
+          fi
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: [toolchain]
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.10.1
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
 
   test:
     name: Test
     runs-on: ubuntu-latest
+    needs: [toolchain]
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: go vet
         run: go vet ./...
@@ -47,14 +75,15 @@ jobs:
   vuln:
     name: Vulnerability scan
     runs-on: ubuntu-latest
+    needs: [toolchain]
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
       - name: govulncheck
         run: govulncheck ./...
 
@@ -63,10 +92,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test, vuln]
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Build (amd64)
         run: make build
@@ -77,22 +106,24 @@ jobs:
     name: SBOM + image scan
     runs-on: ubuntu-latest
     needs: [build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Generate SBOM (CycloneDX)
         uses: anchore/sbom-action@v0
         with:
+          syft-version: ${{ env.SYFT_VERSION }}
           format: cyclonedx-json
-          artifact-name: sbom.json
           output-file: sbom.json
+          upload-artifact: false
       - name: Scan SBOM with grype
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@v7
         with:
+          grype-version: ${{ env.GRYPE_VERSION }}
           sbom: sbom.json
           fail-build: true
           severity-cutoff: high
       - name: Upload SBOM
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v7
         with:
           name: sbom

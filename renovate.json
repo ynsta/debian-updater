@@ -24,7 +24,7 @@
     {
       "description": "Auto-merge security patches when CI passes",
       "matchUpdateTypes": ["patch", "pin", "digest"],
-      "matchCurrentVersion": "!/^0/",
+      "matchCurrentVersion": "!/^v?0(\\.|$)/",
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
@@ -35,10 +35,23 @@
       "groupName": "go toolchain"
     },
     {
+      "description": "Group CI build tools pinned in workflow env",
+      "matchDepNames": ["golangci/golangci-lint", "golang.org/x/vuln", "anchore/syft", "anchore/grype"],
+      "groupName": "build tools"
+    },
+    {
       "description": "Separate group for minor/major",
       "matchUpdateTypes": ["minor", "major"],
       "automerge": false,
       "labels": ["dependencies", "review-required"]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Tool pins declared as env vars in GitHub workflows",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>\\S+)\\s+[A-Z_]+:\\s*\"(?<currentValue>[^\"]+)\""]
     }
   ],
   "postUpdateOptions": ["gomodTidy"],

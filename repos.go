@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -147,10 +148,10 @@ func (app *App) disableThirdPartyRepos() {
 			// Roll back the renames we already completed, so the operator
 			// doesn't end up with a half-disabled set of repositories that
 			// would be hard to reason about after failure.
-			for i := len(done) - 1; i >= 0; i-- {
-				undoErr := app.fs.Rename(done[i].to, done[i].from)
+			for _, r := range slices.Backward(done) {
+				undoErr := app.fs.Rename(r.to, r.from)
 				if undoErr != nil {
-					slog.Error("Failed to roll back repo disable", "step", "repos.disable.rollback", "file", done[i].from, "error", undoErr.Error())
+					slog.Error("Failed to roll back repo disable", "step", "repos.disable.rollback", "file", r.from, "error", undoErr.Error())
 				}
 			}
 

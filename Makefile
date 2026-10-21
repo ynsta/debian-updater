@@ -1,4 +1,13 @@
 APP_NAME := debian-updater
+# Pin the Go toolchain to the exact version declared in go.mod so local
+# builds match CI; the go command downloads it on demand if missing.
+# Override with GOTOOLCHAIN=local (environment or make argument) when offline.
+GO_VERSION := $(shell sed -n 's/^go //p' $(dir $(lastword $(MAKEFILE_LIST)))go.mod)
+ifeq ($(GO_VERSION),)
+$(error cannot read go directive from go.mod)
+endif
+GOTOOLCHAIN ?= go$(GO_VERSION)
+export GOTOOLCHAIN
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BUILD_CMD := CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static" -s -w'
 GOARCH ?= amd64
